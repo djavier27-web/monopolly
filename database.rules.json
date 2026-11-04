@@ -1,0 +1,7 @@
+{"rules":{"rooms":{
+ ".read":"auth != null && auth.token.email === 'GANTI_EMAIL_ADMIN@gmail.com' && auth.token.email_verified === true",
+ "$c":{
+  ".read":"auth != null",
+  "g":{".write":"auth != null"},
+  "cfg":{".write":"auth != null && auth.token.email === 'GANTI_EMAIL_ADMIN@gmail.com' && auth.token.email_verified === true"}
+ }}}}
