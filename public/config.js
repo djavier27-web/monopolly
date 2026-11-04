@@ -1,8 +1,8 @@
 // Isi dari Firebase Console > Project settings > Your apps > Web app
 const FIREBASE_CONFIG={
- apiKey:"IAIzaSyA8gX-2-AeddIKNcMxVdeyUUqE4d2tvFdo",
- authDomain:"onopoly-826fd.firebaseapp.com",
- databaseURL:"https://onopoly-826fd.firebasestorage.app",
- projectId:"onopoly-826fd",
- appId:"1:632661143627:web:448f85267be9a51b7f9dce"
+ apiKey:"AIzaSyDcWkDlKYwEB9fPfT6zJg8iFEUdTaW4tjQ",
+ authDomain:"remi-9140e.firebaseapp.com",
+ databaseURL:"remi-9140e.firebasestorage.app",
+ projectId:"remi-9140e",
+ appId:"1:227996872753:web:2a8a323f7da02162586510"
 };
