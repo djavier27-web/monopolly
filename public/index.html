@@ -1,0 +1,90 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Monopoli Blox</title><link rel="icon" href="favicon.svg">
+<style>
+:root{--ac:#ffd23f;--card:#201046}*{box-sizing:border-box}
+body{margin:0;font:600 14px system-ui,sans-serif;color:#f4efff;background:radial-gradient(circle at 20% 0,#3b1c8c,#12082b 60%);min-height:100vh}
+button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:10px 14px;background:var(--ac);color:#1b1035;font-weight:800;box-shadow:0 4px 0 #b8941a}button:active{transform:translateY(3px);box-shadow:none}
+button.s{background:#3a2a73;color:#fff;box-shadow:0 4px 0 #22164a}button.g{background:#2fbf71;box-shadow:0 4px 0 #1b7f49;color:#fff}
+input{font:inherit;padding:10px;border-radius:10px;border:2px solid #4b3a8f;background:#150a33;color:#fff;width:100%}
+.wrap{display:flex;gap:14px;padding:12px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+.lobby{max-width:360px;margin:8vh auto;background:var(--card);padding:22px;border-radius:20px;display:grid;gap:10px;text-align:center;box-shadow:0 10px 40px #0008}
+.lobby h1{margin:0;font-size:34px;color:var(--ac)}
+#board{display:grid;grid-template:repeat(11,1fr)/repeat(11,1fr);width:min(96vw,calc(100vh - 24px),760px);aspect-ratio:1;background:#0d5c3a;border:6px solid #000;border-radius:14px;gap:2px;padding:2px}
+.t{background:#f2ead3;color:#222;border-radius:4px;font-size:clamp(6px,1.1vw,10px);display:flex;flex-direction:column;overflow:hidden;border:3px solid transparent;text-align:center;line-height:1.1;position:relative}
+.t i{display:block;height:20%;min-height:4px}.t b{flex:1;display:block;padding:1px;overflow:hidden}.t.cr{background:#d6efd8;font-size:clamp(7px,1.2vw,11px)}
+.t em{position:absolute;top:0;right:0;font-style:normal;font-size:clamp(6px,1vw,10px)}.tk{position:absolute;bottom:0;left:0;right:0;font-size:clamp(10px,2vw,18px)}
+#mid{grid-area:2/2/11/11;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:linear-gradient(135deg,#0f7a4b,#0a4a2f);border-radius:10px;text-align:center;padding:8px}
+#mid h2{margin:0;font-size:clamp(18px,4vw,38px);color:var(--ac);text-shadow:0 3px 0 #000}
+.dc{display:flex;gap:12px}.d{width:clamp(38px,7vw,60px);aspect-ratio:1;background:#fff;border-radius:12px;display:grid;grid:repeat(3,1fr)/repeat(3,1fr);padding:15%;box-shadow:0 5px 0 #bbb}
+.d u{border-radius:50%;background:#222;margin:8%}.d u.o{background:transparent}.roll{animation:sp .6s ease-out}@keyframes sp{from{transform:rotate(0) scale(.5)}to{transform:rotate(720deg) scale(1)}}
+.acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.side{width:300px;max-width:96vw;display:grid;gap:10px}.box{background:var(--card);border-radius:14px;padding:10px}
+.pl{display:flex;justify-content:space-between;padding:6px 8px;border-left:6px solid;border-radius:6px;margin-bottom:4px;background:#2c1a5e}.pl.on{background:#4b2fa8;outline:2px solid var(--ac)}
+#lg{max-height:200px;overflow:auto;font-size:12px;font-weight:500}#lg div{padding:2px 0;border-bottom:1px solid #fff2}
+#toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:#e5383b;padding:8px 16px;border-radius:10px;opacity:0;transition:.3s;z-index:9}
+.win{position:fixed;inset:0;background:#000b;display:flex;align-items:center;justify-content:center;font-size:40px;z-index:8;text-align:center}
+</style></head><body><div id="app"></div><div id="toast"></div>
+<script src="board.js"></script><script src="game.js"></script><script src="audio.js"></script><script src="config.js"></script><script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import{getAuth,signInAnonymously}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import{getDatabase,ref,onValue,runTransaction,get}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+const fb=initializeApp(FIREBASE_CONFIG),auth=getAuth(fb),db=getDatabase(fb);
+let uid=null,code=localStorage.code||'',me=null,S=null,P=null,off,lr=-1,cfg={};
+const $=s=>document.querySelector(s);
+const pos=i=>i<=10?[11,11-i]:i<=20?[11-(i-10),1]:i<=30?[1,1+(i-20)]:[1+(i-30),11];
+const IC={go:'🏁',chest:'📦',chance:'❓',tax:'💸',jail:'🔒',free:'🅿️',gojail:'👮',rail:'🚆',util:'💡'};
+const PAT=[[],[4],[0,8],[0,4,8],[0,2,6,8],[0,2,4,6,8],[0,2,3,5,6,8]];
+const die=n=>`<div class="d ${S.rn!=lr?'roll':''}">${[...Array(9).keys()].map(i=>`<u class="${PAT[n].includes(i)?'':'o'}"></u>`).join('')}</div>`;
+function toast(m){Sound.play('error');const e=$('#toast');e.textContent=m;e.style.opacity=1;setTimeout(()=>e.style.opacity=0,2200)}
+async function api(type,o={}){let err=null;
+ await runTransaction(ref(db,`rooms/${code}/g`),cur=>{err=null;if(!cur)return cur;const x=Game.apply(cur,{type,...o},uid,cfg);if(x.err){err=x.err;return}return x.s});
+ if(err)toast(err);return err}
+async function enter(type){const name=$('#nm').value||'Pemain';
+ if(type=='create'){for(let n=0;n<5&&!code;n++){const c=Math.random().toString(36).slice(2,6).toUpperCase();
+   const r=await runTransaction(ref(db,`rooms/${c}/g`),cur=>cur?undefined:Game.newRoom(uid,name));if(r.committed)code=c}}
+ else{const c=$('#rc').value.toUpperCase();if(!(await get(ref(db,`rooms/${c}/g`))).exists())return toast('Ruang tidak ditemukan');
+  code=c;if(await api('join',{name})){code='';return}}
+ if(code){localStorage.code=code;connect()}}
+function connect(){off&&off();
+ const a=onValue(ref(db,`rooms/${code}/g`),s=>{if(!s.exists())return out();S=Game.norm(s.val());S.code=code;try{sfx(P,S)}catch(e){}P=S;
+  const i=S.players.findIndex(p=>p.uid==uid);if(i<0)return out();me={id:i};render();lr=S.rn}),
+ b=onValue(ref(db,`rooms/${code}/cfg`),s=>cfg=s.val()||{});off=()=>{a();b()}}
+// Efek suara dari perbedaan state sebelumnya (a) dan sekarang (b)
+function sfx(a,b){
+ if(!a)return;
+ if(!b.started){if(b.players.length>a.players.length)Sound.play('join');return}
+ if(!a.started){Sound.play('turn');return}
+ const nl=[];for(const l of b.log){if(l===a.log[0])break;nl.push(l)}
+ const has=k=>nl.some(l=>l.includes(k));let d=0;
+ if(b.rn!=a.rn){Sound.play('dice');d=.7;
+  b.players.forEach((p,i)=>{const o=a.players[i];if(!o||p.pos==o.pos||(p.jail&&!o.jail))return;
+   const n=(p.pos-o.pos+40)%40;if(n>12)return;
+   for(let k=0;k<n;k++)Sound.play('hop',d+k*.11);d+=n*.11;Sound.play('land',d)})}
+ d+=.15;
+ if(has('lewat START')||has('bebas'))Sound.play('coin',d);
+ if(has('bayar sewa')||has('bayar pajak')||has('bayar denda'))Sound.play('pay',d+.1);
+ if(nl.some(l=>/: /.test(l)&&!l.includes('bayar'))){Sound.play('card',d);const c=nl.find(l=>/: /.test(l));Sound.play(/\+\d|START/.test(c)?'coin':/-\d/.test(c)?'pay':'card',d+.35)}
+ if(has('membeli'))Sound.play('buy');
+ if(has('membangun'))Sound.play('build');
+ if(has('penjara!')||has('→ penjara'))Sound.play('jail',d+.2);
+ if(has('bangkrut'))Sound.play('bankrupt',d+.4);
+ if(b.winner!=null&&a.winner==null)Sound.play('win',d+.8);
+ else{const c=b.players[b.turn];if(c&&c.uid==uid&&(a.turn!=b.turn||(a.phase!='roll'&&b.phase=='roll')))Sound.play('turn',d+.5)}}
+function out(){localStorage.removeItem('code');location.reload()}
+function home(){$('#app').innerHTML=`<div class=lobby><h1>🎲 Monopoli Blox</h1><p>Main bareng teman, kapan saja</p><input id=nm placeholder="Nama kamu" maxlength=14><button onclick="enter('create')">➕ Buat Ruang</button><input id=rc placeholder="Kode ruang" maxlength=4 style="text-transform:uppercase"><button class=s onclick="enter('join')">🚪 Gabung</button></div>`}
+function render(){const A=$('#app');
+ if(!S.started){A.innerHTML=`<div class=lobby><h1>Ruang ${S.code}</h1><p>Bagikan kode ini ke teman (2-6 pemain)</p>${S.players.map(p=>`<div class=pl style="border-color:${p.color}">${p.ico} ${p.name}</div>`).join('')}${me.id==0?`<button class=g onclick="api('start')">▶ Mulai Game</button>`:'<p>Menunggu host…</p>'}<button class=s onclick=out()>Keluar</button></div>`;return}
+ const cur=S.players[S.turn],mine=cur.id==me.id,T=BOARD[cur.pos],ph=S.phase;
+ const full=i=>BOARD.every((x,j)=>x.c!==BOARD[i].c||S.own['t'+j]==me.id);
+ const bl=!mine||ph=='buy'?[]:BOARD.map((x,i)=>i).filter(i=>BOARD[i].c&&S.own['t'+i]==me.id&&full(i)&&(S.hs['t'+i]||0)<5);
+ const cells=BOARD.map((t,i)=>{const [r,c]=pos(i),o=S.own['t'+i],h=S.hs['t'+i]||0;
+  return `<div class="t ${t.c?'':'cr'}" style="grid-area:${r}/${c};border-color:${o!=null?S.players[o].color:'transparent'}">${t.c?`<i style="background:${C[t.c]}"></i>`:''}<b>${t.c?'':(IC[t.t]||'')+' '}${t.n}${t.p?'<br>$'+t.p:''}${t.a?'<br>-$'+t.a:''}</b>${h?`<em>${h==5?'🏨':'🏠'.repeat(h)}</em>`:''}<span class=tk>${S.players.filter(p=>p.pos==i&&!p.out).map(p=>p.ico).join('')}</span></div>`}).join('');
+ const msg=mine?(ph=='roll'?(cur.jail?'Kamu di penjara: lempar double!':'Giliranmu! Lempar dadu'):ph=='buy'?`Beli ${T.n} seharga $${T.p}?`:'Selesai? Akhiri giliran'):`Giliran ${cur.ico} ${cur.name}`;
+ const btn=!mine?'':ph=='roll'?`<button onclick="api('roll')">🎲 Lempar Dadu</button>`:ph=='buy'?`<button class=g onclick="api('buy')">Beli $${T.p}</button><button class=s onclick="api('skip')">Lewati</button>`:`<button onclick="api('end')">Akhiri Giliran ➜</button>`;
+ A.innerHTML=`<div class=wrap><div id=board>${cells}<div id=mid><h2>MONOPOLI</h2><div class=dc>${die(S.dice[0])}${die(S.dice[1])}</div><div>${msg}</div><div class=acts>${btn}</div></div></div>
+ <div class=side><div class=box>${S.players.map((p,i)=>`<div class="pl ${i==S.turn?'on':''}" style="border-color:${p.color}"><span>${p.ico} ${p.name}${p.id==me.id?' (kamu)':''}${p.out?' 💀':''}${p.jail?' 🔒':''}</span><span>💰${p.money}</span></div>`).join('')}</div>
+ ${bl.length?`<div class=box>🏠 Bangun rumah:<div class=acts>${bl.map(i=>`<button class=s onclick="api('build',{tile:${i}})">${BOARD[i].n} $${H[BOARD[i].c]}</button>`).join('')}</div></div>`:''}
+ <div class=box id=lg>${S.log.map(l=>`<div>${l}</div>`).join('')}</div><button class=s onclick=out()>Keluar ruang</button></div></div>
+ ${S.winner!=null?`<div class=win>🏆 ${S.players[S.winner].name} menang!<br><button onclick=out()>Main lagi</button></div>`:''}`}
+Object.assign(window,{api,enter,out});
+try{await signInAnonymously(auth);uid=auth.currentUser.uid;code?connect():home()}catch(e){document.body.innerHTML='<p style="padding:20px">Firebase belum dikonfigurasi: '+e.message+'</p>'}
+</script></body></html>

@@ -1,0 +1,40 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin Monopoli</title><link rel="icon" href="favicon.svg">
+<style>*{box-sizing:border-box}body{margin:0;padding:14px;font:600 14px system-ui;background:#12082b;color:#f4efff;max-width:760px;margin:auto}
+.c{background:#201046;border-radius:14px;padding:14px;margin:10px 0}h3{margin:0 0 8px;color:#ffd23f}
+button{font:inherit;cursor:pointer;border:0;border-radius:9px;padding:9px 12px;background:#ffd23f;color:#1b1035;font-weight:800;margin:2px}button.s{background:#3a2a73;color:#fff}
+input,select{font:inherit;padding:8px;border-radius:9px;border:2px solid #4b3a8f;background:#150a33;color:#fff;margin:2px}input[type=number]{width:80px}
+.r{display:flex;flex-wrap:wrap;gap:4px;align-items:center}#m{color:#ff6b6b}</style></head><body>
+<h2>🎛 Admin & Remote Dadu</h2><div id=m></div>
+<div id=login class=c><button onclick=login()>🔐 Masuk dengan Google</button></div>
+<div id=panel hidden>
+<div class=c><h3>Ruang</h3><select id=rm></select><div id=st></div></div>
+<div class=c><h3>Remote Dadu (antrian lemparan berikutnya)</h3><div class=r>Untuk: <select id=pl></select> Dadu: <select id=d1></select><select id=d2></select><button onclick=sendQ()>Kirim</button></div>
+<div class=r>Preset: <button class=s onclick="pre(6,6)">Double 6</button><button class=s onclick="pre(1,1)">Double 1</button><button class=s onclick="pre(3,4)">Total 7</button><button class=s onclick="pre(5,6)">Total 11</button><button class=s onclick="pre(1,2)">Total 3</button><button class=s onclick=clearQ()>Kosongkan antrian</button></div></div>
+<div class=c><h3>Mode Dadu Global</h3><div class=r><select id=mode><option value=random>Acak normal</option><option value=fixed>Tetap (A+B)</option><option value=doubles>Selalu double</option><option value=range>Rentang min-max</option></select>
+A<input id=a type=number min=1 max=6 value=3>B<input id=b type=number min=1 max=6 value=4>min<input id=mn type=number min=1 max=6 value=1>max<input id=mx type=number min=1 max=6 value=6><button onclick=setMode()>Terapkan</button></div></div>
+<div class=c><h3>Cheat Pemain</h3><div class=r><select id=pl2></select><input id=amt type=number value=500 style="width:100px"><button onclick="cheat('money')">Tambah uang</button>
+<select id=tp></select><button onclick="cheat('tp')">Teleport</button></div></div></div>
+<script src="board.js"></script><script src="game.js"></script><script src="config.js"></script><script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import{getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import{getDatabase,ref,onValue,set,push,remove,runTransaction}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+const fb=initializeApp(FIREBASE_CONFIG),auth=getAuth(fb),db=getDatabase(fb),$=s=>document.querySelector(s);let ROOMS={};
+$('#d1').innerHTML=$('#d2').innerHTML=[1,2,3,4,5,6].map(n=>`<option>${n}</option>`).join('');
+$('#tp').innerHTML=BOARD.map((t,i)=>`<option value=${i}>${i}. ${t.n}</option>`).join('');
+const room=()=>$('#rm').value,cr=p=>ref(db,`rooms/${room()}/cfg/${p}`);
+const login=()=>signInWithPopup(auth,new GoogleAuthProvider()).catch(e=>$('#m').textContent=e.message);
+const sendQ=()=>push(cr('q'),{t:Date.now(),pid:$('#pl').value===''?-1:+$('#pl').value,d:[+$('#d1').value,+$('#d2').value]});
+const pre=(a,b)=>{$('#d1').value=a;$('#d2').value=b;sendQ()},clearQ=()=>remove(cr('q'));
+const setMode=()=>set(cr('set'),{mode:$('#mode').value,a:+$('#a').value,b:+$('#b').value,min:+$('#mn').value,max:+$('#mx').value});
+const cheat=type=>runTransaction(ref(db,`rooms/${room()}/g`),cur=>cur?Game.adm(cur,{type,pid:+$('#pl2').value,amt:$('#amt').value,pos:$('#tp').value})||undefined:cur);
+Object.assign(window,{login,sendQ,pre,clearQ,setMode,cheat});
+function draw(){const s=$('#rm'),c=s.value,ks=Object.keys(ROOMS);s.innerHTML=ks.map(k=>`<option>${k}</option>`).join('');if(ks.includes(c))s.value=c;
+ const R=ROOMS[s.value];if(!R||!R.g){$('#st').textContent='Belum ada ruang';return}
+ const g=Game.norm(R.g),cf=R.cfg||{},v=$('#pl').value,v2=$('#pl2').value,o=g.players.map(p=>`<option value=${p.id}>${p.ico} ${p.name}</option>`).join('');
+ $('#pl').innerHTML='<option value="">Semua pemain</option>'+o;$('#pl').value=v;$('#pl2').innerHTML=o;$('#pl2').value=v2;
+ const q=Object.entries(cf.q||{}).filter(([id])=>!g.used[id]).map(([,e])=>(e.pid<0?'Semua':g.players[e.pid]?.name)+': '+e.d.join('+'));
+ $('#st').innerHTML=(g.started?'Giliran: '+g.players[g.turn].name:'Belum mulai')+' | Mode: '+((cf.set||{}).mode||'random')+'<br>'+g.players.map(p=>`${p.ico} ${p.name} 💰${p.money} 📍${BOARD[p.pos].n}${p.out?' 💀':''}`).join('<br>')+'<br>Antrian: '+(q.join(', ')||'-')}
+onAuthStateChanged(auth,u=>{if(!u||u.isAnonymous)return;$('#login').hidden=true;$('#panel').hidden=false;
+ onValue(ref(db,'rooms'),s=>{ROOMS=s.val()||{};$('#m').textContent='';draw()},e=>{$('#m').textContent='Akses ditolak: '+u.email+' bukan admin di database.rules.json'})});
+$('#rm').onchange=draw;
+</script></body></html>
